@@ -18,44 +18,47 @@ using std::cout;
 
     //Define some Physical constants
     constexpr double C_LIGHT=299792458.; // [m/s] 
+    constexpr int  NDIMS=3; // 3 Dimensions 
 
-   extern "C" {
-      struct part{
-	int   l_x, l_y, l_z, l_w, l_px, l_py, l_pz, l_vx, l_vy, l_vz, l_ek, l_rm, l_gm;
-	double *x, *y, *z, *w,  *px, *py, *pz, *vx, *vy, *vz, *ek, *rm, *gm;
-      };
-      
-      void read_particle(const char* cstring, int clen,
-			 const char* spec,    int len_sp,
-			 part* arrays, long* npart, long* npart_proc, long* start);
-      
-      struct field{
-	int   global_sx, global_sy, global_sz, l_sx, l_sy, l_sz, l_dx, l_dy, l_dz, l_gridx, l_gridy, l_gridz, l_data_size;
-	double stagger;
-	double* gridx,  *gridy, *gridz, *l_field_data;
-      };
-      
-      
-      void read_fields( const char* cstring, int clen,  const char* blockid, int blen, field* field_x);
-      void read_derived_vars( const char* cstring, int clen,  const char* blockid, int blen, field* field_x);  
-      
-      void init_read();
-      
-    }
-    
-       
+    struct part{      
+      int   len; 
+      double charge, mass;
+      double *x, *y, *z, *w,  *px, *py, *pz, *gm;
+    };
+
+    struct part_kine{
+      size_t   len; 
+      double charge, mass;
+      std::vector<double> x[3];
+      std::vector<double> p[3];
+      std::vector<double> w;      
+    };
+
+         
     static inline bool sort_using_less_than(double u, double v) 
     {
       return u < v;
     }
-    
-    static inline double  max(double A[], int len) 
+
+
+    static inline double  vmax(const std::vector<double> &A) 
+    {
+      return  *std::max_element(A.begin(),A.end());
+    }
+
+    static inline double  vmin(const std::vector<double> &A) 
+    {
+      return  *std::min_element(A.begin(),A.end());
+    }
+
+    static inline double  max(const double* A, int len) 
     {
       int max_val = A[0];
- 
+
       #pragma omp parallel for reduction(max:max_val) 
-      for (int idx = 0; idx < len; idx++)
+      for (int idx = 0; idx < len; idx++){
 	max_val = max_val > A[idx] ? max_val : A[idx];
+      }
       
       return max_val;
     }
@@ -67,7 +70,7 @@ using std::cout;
       #pragma omp parallel for reduction(min:min_val) 
       for (int idx = 0; idx < len; idx++)
 	min_val = min_val < A[idx] ? min_val : A[idx];
-      
+
       return min_val;
     }
 
@@ -135,6 +138,19 @@ public:
      * Read from /proc/self/status and display the Virtual Memory info at rank 0
      * on console
      *
+     * A few worthy points can be noted here:
+     *
+     *   VmRSS in /proc/[pid]/statm is a useful data.
+     *   =====
+     *   It shows how much memory in RAM is occupied by the process.
+     *   The rest extra memory has either been not used or has been swapped out.
+     * 
+     *   VmSize is how much virtual memory the process has in total.
+     *   =====
+     *	 This includes all types of memory, both in RAM and swapped out.
+     *   These numbers can get skewed because they also include shared libraries.
+     * 
+     *
      * @param tag      item name to measure
      * @param rank     MPI rank
      */
@@ -147,7 +163,7 @@ public:
         if (m_Rank > 0)
             return;
 
-        std::cout << " memory at:  " << tag;
+        std::cout << "[Memory used: " << tag << "]" << std::endl;
         std::ifstream input(m_Name.c_str());
 
         if (input.is_open())
@@ -196,8 +212,12 @@ public:
     ~Timer()
     {
         MPI_Barrier(MPI_COMM_WORLD);
-        std::string tt = "~" + m_Tag;
-        // MemoryProfiler (m_Rank, tt.c_str());
+        std::string tt = m_Tag;	
+	if ( 0 == m_Rank) {
+	  std::cout << std::endl;
+	  std::cout <<"-I- Job statistics: " << std::endl;
+	}
+        MemoryProfiler (m_Rank, tt.c_str());
         m_End = std::chrono::system_clock::now();
 
         double millis = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -206,9 +226,9 @@ public:
         double secs = millis / 1000.0;
         if (m_Rank > 0)
             return;
-
-        std::cout << "  [" << m_Tag << "] took:" << secs << " seconds.\n";
-        std::cout << "   \t From ProgStart in seconds "
+	std::cout << std::endl;   
+        std::cout << "[" << m_Tag << "] took:" << secs << " seconds.\n";
+        std::cout << "   \t From Program Start in seconds "
                   << std::chrono::duration_cast<std::chrono::milliseconds>(
                          m_End - m_ProgStart)
                          .count() /
