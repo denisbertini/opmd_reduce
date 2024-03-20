@@ -170,7 +170,7 @@ using std::chrono::milliseconds;
         // Select p_cell with at least min. particles	
 	if (npart_pcell < m_min_npart_pcell)
 	  { 
-	    if ((m_verbosity>0) && (0 == m_mpi_rank)){
+	    if ((m_verbosity>1) && (0 == m_mpi_rank)){
 	      std::cout << " icell Linear: " << c_index
 			<< " removing npart/cell:" << npart_pcell
 			<< std::endl;
@@ -447,20 +447,21 @@ using std::chrono::milliseconds;
 	    // gamma = sqrt( 1 + (p/mo*c)**2)
 	    mo = pp.mass;
 	    double fac = pp.p[0][p_indexes[i_pcell][p]] * pp.p[0][p_indexes[i_pcell][p]]	      
-	      + pp.p[1][p_indexes[i_pcell][p]] * pp.p[1][p_indexes[i_pcell][p]]
-	      + pp.p[2][p_indexes[i_pcell][p]] * pp.p[2][p_indexes[i_pcell][p]];
+	               + pp.p[1][p_indexes[i_pcell][p]] * pp.p[1][p_indexes[i_pcell][p]]
+	               + pp.p[2][p_indexes[i_pcell][p]] * pp.p[2][p_indexes[i_pcell][p]];
 	    fac = fac / (mo * mo * C_LIGHT * C_LIGHT); 
 	    double gamma = sqrt( 1 + fac );
 
-	    // E_tot
-	    tot_e +=  gamma * pp.w[p_indexes[i_pcell][p]] * C_LIGHT * C_LIGHT;
+	    // E_tot ( check me !)
+	    tot_e +=  gamma * pp.w[p_indexes[i_pcell][p]] * mo * C_LIGHT * C_LIGHT;
 	   	    
 	    if ((m_verbosity>1) && (0 == m_mpi_rank)){	 
 	      std::cout.precision(8);
 	      std::cout << " p_index: " << p
 			<< " px: " << pp.p[0][p_indexes[i_pcell][p]] << " [kg m s^-1] "
 			<< " py: " << pp.p[1][p_indexes[i_pcell][p]] << " [kg m s^-1] "
-			<< " pz: " << pp.p[2][p_indexes[i_pcell][p]] << " [kg m s^-1] "		  
+			<< " pz: " << pp.p[2][p_indexes[i_pcell][p]] << " [kg m s^-1] "
+		        << " gamma: " << gamma   
 			<< " me: " << pp.mass << " [kg] "
 			<< std::endl;
 	    }
@@ -482,7 +483,8 @@ using std::chrono::milliseconds;
 		    << " tot_w: " << tot_w
 		    << " tot_px: " << tot_px 
 		    << " tot_py: " << tot_py 
-		    << " tot_pz: " << tot_pz 
+		    << " tot_pz: " << tot_pz
+	            << " tot_e: " << tot_e
 		    << " rest_mo: " << mo
 		    << std::endl; 
 	}
@@ -578,6 +580,7 @@ using std::chrono::milliseconds;
 	      pp.p[2][p_indexes[i_pcell][1]] = pa*(cos_w*u1_z - sin_w*u2_z);
 	      pp.w[p_indexes[i_pcell][1]]  = 0.5*tot_w;
 
+	      
 	      // Mask the other indexes in the cell
 	      for (size_t p=2; p<npart_per_cell; p++){
 		m_mask_array[p_indexes[i_pcell][p]]=-1;

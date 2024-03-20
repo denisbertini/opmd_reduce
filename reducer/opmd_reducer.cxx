@@ -206,9 +206,17 @@ void Opmd_Reducer::get_kinematics(const std::string& filename, const std::string
 	  std::cout <<"-I- rank#: " << mpi_rank << " dn_part: " 
 		    << dn_part << " mass: " << *mass.get() << " charge: " << *charge.get() << std::endl;	
 	  std::cout << " chunk_extent[0]: " << chunk_extent[0] << " : " << chunk_extent[1] << std::endl;
-	  std::cout << " x: " <<  part_kine_x[0].get()[0] << " y: " << part_kine_x[1].get()[0]  << std::endl;
+
+	  /* for (int l=0; l<10; l++) 
+	    std::cout << "i: " << l 
+		      << " px: " <<  part_kine_p[0].get()[l]
+		      << " py: " << part_kine_p[1].get()[l]
+		      << " pz: " << part_kine_p[2].get()[l]
+		      << std::endl;
+	  */
+	  
 	  }	
-       
+
 	// Kinematics Store 
 	m_part_kine.len = dn_part;	  
 	m_part_kine.charge = *charge.get();  
@@ -272,6 +280,18 @@ void Opmd_Reducer::do_merging(const int n_part_pcell, const size_t n_bins[], con
 	  }
 	}//!part_index
 
+
+	/*
+	if (0 == mpi_rank){
+          for (int l=0; l<10; l++) 
+	    std::cout << "reduced i: " << l 
+		      << " px: " <<  kine_reduced.p[0][l]
+		      << " py: " <<  kine_reduced.p[1][l]
+		      << " pz: " <<  kine_reduced.p[2][l]
+		      << std::endl;
+	  }	
+	*/ 
+	
 	// Check the consitency count / vector(size)
 	for (size_t i=0; i<NDIMS; i++){
 	  assert(kine_reduced.x[i].size() == count);
@@ -303,14 +323,13 @@ void Opmd_Reducer::do_merging(const int n_part_pcell, const size_t n_bins[], con
 	//
 	
 	// Creating series
-	m_output_file="z_openpmd_%06T.h5";
 	Series o_series= Series(m_output_file.c_str(), Access::CREATE, MPI_COMM_WORLD);
 	o_series.setAuthor("d.bertini@gsi.de");
 	o_series.setMachine("Virgo3");
 	o_series.setSoftwareDependencies("https://git.gsi.de/d.bertini/pp-containers/prod/rlx8_ompi_ucx.def");
 	o_series.setParticlesPath("particles/");
 	o_series.setIterationEncoding(IterationEncoding::fileBased);
-	o_series.setIterationFormat("z_openpmd_%06T.h5");
+	o_series.setIterationFormat("z_opmd_%06T.h5");
 	
 	// In parallel contexts, it's important to explicitly open iterations.
 	o_series.iterations[m_istep].open();
@@ -443,11 +462,17 @@ int Opmd_Reducer::reduce(int argc, char *argv[]){
     {
       // Input filename
       std::string opmd_file_full=opmd_dir+"/"+ opmd_file;
-      // Output filename
-      std::string reduced_opmd_file="reduced_"+opmd_file;
-      // !!CHECK ME !!   
-      //m_output_file="reduced_"+opmd_file;    
-      m_output_file="/lustre/rz/dbertini/data/reduced_openpmd_20000.h5";     
+      // Output reduced filename
+      std::string z_file = "z_opmd_%06T"; 
+      if ( output_format == "h5" ){
+	z_file+=".h5";
+      }else if ( output_format == "bp"){
+	z_file+=".bp";
+      } else {
+	// default to hdf5
+	z_file+=".h5";	
+      }
+      m_output_file=z_file;
       
       if (0 == mpi_rank){
 	std::cout << "-I- Reducing opmd file: " << opmd_file_full << std::endl;      
